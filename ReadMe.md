@@ -53,3 +53,7 @@ By default, the server will start at `http://127.0.0.1:8000/`.
 ##
 ## Check Documentation for API calls & details
 - https://documenter.getpostman.com/view/14422346/2sA3JGfPoq
+
+
+## lld rough notes
+https://docs.google.com/document/d/1zc70eUKPW0BHGTgxFRh7pJdBEZwbCKzaP-cX4tmg6Ho/edit
