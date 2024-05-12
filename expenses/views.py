@@ -36,13 +36,20 @@ class GroupAPIView(APIView):
                     }
                 )
         else:
-            owed_expenses, borrowed_expenses = helper.fetch_group_expenses(groups, request)
+            expenses = helper.fetch_user_expense(request,group_id=groups.id)
+            members = helper.fetch_group_members(group_id)
+            expenses_data = []
+            for expense in expenses:
+                owed_expenses, borrowed_expenses = helper.fetch_expense_split(expense, request)
+                exp_dict = {"expense_name": expense.name, "expense_id": expense.id}
+                exp_dict["owed_expenses"] = helper.fetch_owed_exp_breakup(owed_expenses)
+                exp_dict["borrowed_expenses"] = helper.fetch_borrowed_exp_breakup(borrowed_expenses)
+                expenses_data.append(exp_dict)
             result = {
                 "group_name": groups.group_name,
-                "group_id": groups.id,
-                "owed_expenses": owed_expenses if owed_expenses else 0,
-                "borrowed_expenses": borrowed_expenses if borrowed_expenses else 0
-
+                "description": groups.description,
+                "members":members,
+                "expenses": expenses_data
             }
         return helper.response_helper(
             success=True,
@@ -93,10 +100,9 @@ class Expenses(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         if expense_id:
-            owed_expenses, borrowed_expenses = helper.fetch_expense_split(expenses, request)
-            result = {"expense_name": expenses.name, "expense_id": expenses.id}
-            result["owed_expenses"] = helper.fetch_owed_exp_breakup(owed_expenses)
-            result["borrowed_expenses"] = helper.fetch_borrowed_exp_breakup(borrowed_expenses)
+            splits = helper.fetch_expense_split_details(expenses)
+            result = {"expense_name": expenses.name,"expense_by":expenses.expense_by.username, "expense_id": expenses.id, "amount": expenses.balance_amt,
+                      "splits": splits}
         else:
             result = []
             for expense in expenses:
@@ -115,7 +121,8 @@ class Expenses(APIView):
 
     def post(self, request, *args, **kwargs):
         request_data = request.data.copy()
-        request_data["expense_by"] = request.user.id
+        if not request_data.get("expense_by"):
+            request_data["expense_by"] = request.user.id
         serializer = ExpenseSerializer(data=request_data)
         if serializer.is_valid():
             expense = serializer.save()

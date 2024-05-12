@@ -39,13 +39,15 @@ def fetch_user_groups(request: object, group_id: Union[str, int] = None) -> obje
     return groups
 
 
-def fetch_user_expense(request: object, expense_id: Union[str, int] = None) -> object:
+def fetch_user_expense(request: object, expense_id: Union[str, int] = None, group_id: Union[str, int]=None) -> object:
     """
     Helper to get user expenses.
     """
     try:
         if expense_id:
             expenses = Expense.objects.get(id=expense_id)
+        elif group_id:
+            expenses = Expense.objects.filter(group__id=group_id)
         else:
             expence_user = request.user
             expenses = [i.expense for i in ExpenseSplit.objects.filter(expense_user=expence_user)]
@@ -56,14 +58,16 @@ def fetch_user_expense(request: object, expense_id: Union[str, int] = None) -> o
     return expenses
 
 
+
+
 def fetch_group_expenses(group: object, request: object) -> tuple:
     """
     Helper to fetch expenses for a group
     """
     member = request.user
-    owed_expenses = ExpenseSplit.objects.filter(expense__group=group, expense__expense_by=member).aggregate(
+    owed_expenses = ExpenseSplit.objects.filter(expense__group=group,balance_outstanding__gt=0, expense__expense_by=member).aggregate(
         total_balance_outstanding=Sum('balance_outstanding')).get("total_balance_outstanding", 0)
-    borrowed_expenses = ExpenseSplit.objects.filter(expense__group=group).exclude(expense__expense_by=member).aggregate(
+    borrowed_expenses = ExpenseSplit.objects.filter(expense__group=group,balance_outstanding__gt=0,expense_user=member).exclude(expense__expense_by=member).aggregate(
         total_balance_outstanding=Sum('balance_outstanding')).get("total_balance_outstanding", 0)
     return owed_expenses, borrowed_expenses
 
@@ -74,8 +78,8 @@ def fetch_expense_split(expense: object, request: object) -> tuple:
     Helper to fetch expense data for a user
     """
     member = request.user
-    borrowed_expense = ExpenseSplit.objects.filter(expense=expense, expense_user=member, balance_outstanding__gt=0)
-    owed_expense_split = ExpenseSplit.objects.filter(expense=expense, balance_outstanding__gt=0).exclude(
+    borrowed_expense = ExpenseSplit.objects.filter(expense=expense, expense_user=member, balance_outstanding__gte=0).exclude(expense__expense_by=member)
+    owed_expense_split = ExpenseSplit.objects.filter(expense=expense,expense__expense_by=member,balance_outstanding__gte=0).exclude(
         expense_user=member)
 
     return owed_expense_split, borrowed_expense
@@ -89,7 +93,9 @@ def fetch_owed_exp_breakup(owed_expenses: object) -> list:
     for debt in owed_expenses:
         exp = {
             "name": debt.expense_user.username,
-            "amount": str(debt.balance_outstanding)
+            "amount": str(debt.amount),
+            "balance": str(debt.balance_outstanding),
+            "status": debt.status
         }
         owed_exp_details.append(exp)
     return owed_exp_details
@@ -103,7 +109,9 @@ def fetch_borrowed_exp_breakup(borrowed_expenses: object) -> list:
     for debt in borrowed_expenses:
         exp = {
             "name": debt.expense_user.username,
-            "amount": str(debt.balance_outstanding)
+            "amount": str(debt.amount),
+            "balance": str(debt.balance_outstanding),
+            "status": debt.status
         }
         borrowed_exp_details.append(exp)
     return borrowed_exp_details
@@ -161,3 +169,19 @@ def update_expense_status(self, **kwargs):
             expense_obj.status = "Paid"
             expense_obj.save()
     return True
+
+def fetch_expense_split_details(expense: object) -> object:
+    expense_splits = ExpenseSplit.objects.filter(expense=expense)
+    splits = []
+    for obj in expense_splits:
+        splits.append({
+            "name": obj.expense_user.username,
+            "amount": str(obj.amount),
+            "balance": str(obj.balance_outstanding),
+            "status": obj.status
+        })
+    return splits
+
+def fetch_group_members(group_id: str):
+    group_members = GroupMember.objects.filter(group_id=group_id).values_list("member__username",flat=True)
+    return group_members
